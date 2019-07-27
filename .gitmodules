@@ -1,0 +1,3 @@
+[submodule "utils/ipc-bench"]
+	path = utils/ipc-bench
+	url = https://github.com/rigtorp/ipc-bench
