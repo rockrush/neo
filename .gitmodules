@@ -1,3 +1,9 @@
 [submodule "utils/ipc-bench"]
 	path = utils/ipc-bench
 	url = https://github.com/rigtorp/ipc-bench
+[submodule "samples/QuickQanava"]
+	path = samples/QuickQanava
+	url = https://github.com/cneben/QuickQanava
+[submodule "samples/QuickQanavaExample"]
+	path = samples/QuickQanavaExample
+	url = https://github.com/kwallner/QuickQanavaExample
