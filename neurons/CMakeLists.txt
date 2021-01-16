@@ -1,0 +1,10 @@
+cmake_minimum_required(VERSION 3.18)
+
+file(GLOB files "*.c")
+foreach(filename ${files})
+	get_filename_component(basename ${filename} NAME_WE)
+	add_library(${basename} MODULE ${filename})
+	set_target_properties(${basename} PROPERTIES PREFIX "")
+	set_target_properties(${basename} PROPERTIES SUFFIX ".neo")
+	set_target_properties(${basename} PROPERTIES LINK_FLAGS "-nostartfiles")
+endforeach()
