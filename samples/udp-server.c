@@ -39,7 +39,7 @@ int main(int argc, char *argv[])
 			exit(-1);
 		}
 		data[n] = '\0';
-  
+
 		printf("Received: %s\n", data); 
   
 		//存储用"冒号十六进制记法"表示的IPv6地址 
@@ -48,7 +48,7 @@ int main(int argc, char *argv[])
 		inet_ntop(AF_INET6, &cli_addr.sin6_addr, buf_addr, 64); 
   
 		printf("Client ip: %s\n", buf_addr); 
-		printf("Client port: %d\n", ntohs(cli_addr.sin6_port)); 
+		printf("Client port: %d\n", ntohs(cli_addr.sin6_port));
 		printf("\n"); 
 	} 
 
