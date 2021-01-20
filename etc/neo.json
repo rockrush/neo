@@ -1,0 +1,9 @@
+{
+	"neuron_dir": "neurons",
+	"db_type": "mysql",
+	"mysql": {
+		"host": "localhost",
+		"user": "root",
+		"passwd": "MobilisCan"
+	}
+}

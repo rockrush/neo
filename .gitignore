@@ -33,3 +33,9 @@
 *.dSYM/
 
 build/
+*.neo
+CMakeFiles
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+/neo
