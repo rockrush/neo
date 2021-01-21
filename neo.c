@@ -11,6 +11,7 @@
 #include <json-c/json.h>
 
 #include "include/neo.h"
+#include "include/linux.h"
 
 struct support sys_info;
 struct neuron *plugins_head = NULL;
@@ -32,12 +33,12 @@ void _register(struct neuron *p) {
 		p->prev = plugins_head;
 		plugins_head = p;
 
-		printf("\t[NEW NEURON] %s\n", p->name);
+		printf(HDR_NOTE "[NEW NEURON] %s\n", p->name);
 	}
 }
 
 void _on_exit(void) {
-	printf("\tCleaning up\n");
+	printf(HDR_NOTE "Cleaning up\n");
 }
 
 static int load_config(const char *cfg_file) {
@@ -47,20 +48,20 @@ static int load_config(const char *cfg_file) {
 	if (!cfg_path)
 		cfg_path = NEO_CFG_FILE;
 	if (!cfg_path) {
-		printf("[ERROR] Config file path not specified.\n");
+		printf(HDR_ERR "Config file path not specified.\n");
 		return EXIT_FAILURE;
 	}
 
 	neo_cfg_json = json_object_from_file(cfg_path);
 	if (!neo_cfg_json) {
-		printf("[ERROR] Unkown error reading config: %s.\n", cfg_path);
+		printf(HDR_ERR "Unkown error reading config: %s.\n", cfg_path);
 		return EXIT_FAILURE;
 	}
 
 	json_object_object_get_ex(neo_cfg_json, "neuron_dir", &cur);
 	if (json_object_get_string(cur))
 		neo_cfg.neuron_dir = realpath(json_object_get_string(cur), NULL);
-	printf("Neuron dir: %s\n", neo_cfg.neuron_dir);
+	printf(HDR_NOTE "Neuron dir: %s\n", neo_cfg.neuron_dir);
 
 	json_object_object_get_ex(neo_cfg_json, "db_type", &cur);
 	if (json_object_get_string(cur))
@@ -68,7 +69,7 @@ static int load_config(const char *cfg_file) {
 
 	json_object_object_get_ex(neo_cfg_json, neo_cfg.db_type, &db_cfg);
 	if (!db_cfg) {
-		printf("[ERROR] Database config not found\n");
+		printf(HDR_ERR "Database config not found\n");
 		json_object_put(neo_cfg_json);
 		return EXIT_FAILURE;
 	}
@@ -110,7 +111,7 @@ static int load_neurons(void)
 			continue;
 		handler = dlopen(plugin_file, RTLD_LAZY);
 		if (handler == NULL) {
-			printf("[WARNING] loading of plugin %s failed.\n", file->d_name);
+			printf(HDR_ERR "loading of plugin %s failed.\n", file->d_name);
 			continue;
 		}
 	}
@@ -127,8 +128,8 @@ int main(int argc, char *argv[]) {
 	};
 
 	/* initialization */
-	sys_info.plugins = 0;
-	sys_info.kern_ver = 200000;
+	get_sysinfo(&sys_info);
+	printf(HDR_NOTE "System info: Linux %d, CPU arch: %s\n", sys_info.kern_ver, sys_info.arch);
 
 	atexit(&_on_exit);
 	while ((opt = getopt_long(argc, argv, short_options, long_options, NULL)) != -1) {
@@ -144,7 +145,7 @@ int main(int argc, char *argv[]) {
 
 	retval = load_neurons();
 	if (retval) {
-		perror("[ERROR] loading of plugins failed");
+		perror(HDR_ERR "loading of plugins failed");
 		return EXIT_FAILURE;
 	}
 

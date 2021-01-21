@@ -4,7 +4,7 @@
 
 /* 返回 1 表示该模块支持当前系统 */
 static int support(struct support *p) {
-	if (p->kern_ver < 197120)
+	if (p->kern_ver < 330240)
 		return -1;
 	// if (p->distro & LOCAL_DISTRO_MASK = NUM)
 	//	do_something();

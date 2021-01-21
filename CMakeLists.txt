@@ -23,7 +23,7 @@ configure_file (
 
 include_directories("${PROJECT_SOURCE_DIR}/include" "${PROJECT_BINARY_DIR}/include")
 
-add_executable(${PROJECT_NAME} neo.c)
+add_executable(${PROJECT_NAME} neo.c utils/linux.c)
 target_link_libraries(${PROJECT_NAME} dl)
 target_link_libraries(${PROJECT_NAME} json-c)
 set_target_properties(${PROJECT_NAME} PROPERTIES LINK_FLAGS "-rdynamic")

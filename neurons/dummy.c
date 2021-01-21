@@ -15,5 +15,5 @@ static int support(struct support *p) {
 NEW_NEURON("dummy", dummy_thread, support);
 
 void NEO_INIT init(void) {
-	printf("Extra init code\n");
+	printf("\tExtra init code\n");
 }
