@@ -8,7 +8,7 @@ static int dummy_thread(void) {
 	return 0;
 } 
 
-static int support(struct support *p) {
+static int support(struct host *p) {
 	return 1;
 }
 

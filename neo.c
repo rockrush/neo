@@ -13,7 +13,7 @@
 #include "include/neo.h"
 #include "include/linux.h"
 
-struct support sys_info;
+struct host sys_info;
 struct neuron *plugins_head = NULL;
 const char *neuron_dir = NULL;
 

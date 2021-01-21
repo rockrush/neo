@@ -1,5 +1,5 @@
 {
-	"neuron_dir": "neurons",
+	"neuron_dir": "neurons",	// Where neurons be placed
 	"db_type": "mysql",
 	"mysql": {
 		"host": "localhost",

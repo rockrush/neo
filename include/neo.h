@@ -20,7 +20,7 @@ void NEO_INIT __init_##neoron_name(void) {_register(&_config);}
 
 #define ARCH_MAXLEN	16
 
-struct support {
+struct host {
 	int kern_ver;
 	char arch[ARCH_MAXLEN];
 	int plugins;
@@ -29,9 +29,10 @@ struct support {
 /* Can be local, or via RDMA, GPU-Direct */
 struct neuron_exchange {
 	//unsigned flags;
-	unsigned data_size;	/* Size of each data item */
-	unsigned bp_size;	/* Size of each bp item */
-	unsigned len;		/* item counts */
+	uint16_t data_size;	/* Size of each data item */
+	uint16_t bp_size;	/* Size of each bp item */
+	uint32_t len;		/* item counts */
+	int8_t state;		/* up to date, partial, done */
 
 	/* data: |  input data of data_size[len]  | bp of bp_size[len]  | */
 	/* As neuron_exchange could be accessed from several nodes, its address may vary,
@@ -44,8 +45,10 @@ struct neuron_exchange {
 /* Neuron is the key concept of Neo */
 struct neuron {
 	char *name;
+	char *host;		/* TODO: Need a means of identify host */
 	struct neuron *prev;
-	int (* support)(struct support *p);	/* if supported */
+	struct neuron *next;
+	int (* support)(struct host *p);	/* if supported */
 	int hw;		/* CPU, CUDA, OpenCL, FPGA, ... */
 
 

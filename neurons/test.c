@@ -3,7 +3,7 @@
 #include "../include/neo.h"
 
 /* 返回 1 表示该模块支持当前系统 */
-static int support(struct support *p) {
+static int support(struct host *p) {
 	if (p->kern_ver < 330240)
 		return -1;
 	// if (p->distro & LOCAL_DISTRO_MASK = NUM)

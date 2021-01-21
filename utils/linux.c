@@ -5,7 +5,7 @@
 
 #include "../include/neo.h"
 
-void get_sysinfo(struct support *info)
+void get_sysinfo(struct host *info)
 {
 	struct utsname version;
 	int ver_major, ver_minor, ver_patch;

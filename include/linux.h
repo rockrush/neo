@@ -1,1 +1,1 @@
-unsigned linux_version(void);
+void get_sysinfo(struct host *host);
