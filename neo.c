@@ -53,7 +53,7 @@ static int load_config(const char *cfg_file) {
 
 	neo_cfg_json = json_object_from_file(cfg_path);
 	if (!neo_cfg_json) {
-		printf("[ERROR] Unkown error reading config: $s.\n", cfg_path);
+		printf("[ERROR] Unkown error reading config: %s.\n", cfg_path);
 		return EXIT_FAILURE;
 	}
 

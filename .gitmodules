@@ -4,3 +4,6 @@
 [submodule "samples/QuickQanavaExample"]
 	path = samples/QuickQanavaExample
 	url = https://github.com/kwallner/QuickQanavaExample
+[submodule "samples/xxhash"]
+	path = samples/xxhash
+	url = https://github.com/stbrumme/xxhash

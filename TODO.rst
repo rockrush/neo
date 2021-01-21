@@ -18,3 +18,8 @@
    d. Node failure causes partial death, not total failure. With kind of
       replication scheme, data won't lose, or rebuild the dead fraction without
       replication, to emulate brain growth.
+
+
+https://github.com/Cyan4973/xxHash
+inotify
+epoll
