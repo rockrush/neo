@@ -1,3 +1,6 @@
+#ifndef	NEO_CONFIG_H
+#define	NEO_CONFIG_H
+
 #define NEO_VERSION_MAJOR	@NEO_VERSION_MAJOR@
 #define NEO_VERSION_MINOR	@NEO_VERSION_MINOR@
 
@@ -5,3 +8,8 @@
 
 #define NEO_CFG_FILE		"etc/neo.json"
 #define NEO_DEBUG			@NEO_DEBUG@
+
+#define SPARE_RATIO			2
+#define DEFAULT_ARRAY_SIZE	16
+
+#endif

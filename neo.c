@@ -129,7 +129,7 @@ int main(int argc, char *argv[]) {
 
 	/* initialization */
 	get_sysinfo(&sys_info);
-	printf(HDR_NOTE "System info: Linux %d, CPU arch: %s\n", sys_info.kern_ver, sys_info.arch);
+	printf(HDR_NOTE "System info: Linux %s, CPU arch: %s\n", sys_info.kern_ver, sys_info.arch);
 
 	atexit(&_on_exit);
 	while ((opt = getopt_long(argc, argv, short_options, long_options, NULL)) != -1) {
@@ -148,6 +148,18 @@ int main(int argc, char *argv[]) {
 		perror(HDR_ERR "loading of plugins failed");
 		return EXIT_FAILURE;
 	}
+
+	// thread poll
+	//	controller thread: processes data IO among nodes, epoll?
+	//	and worker threads: process data IO in node
+	//		each thread maintains load status 2-D array, and pick the most idle one for next hop;
+	//		load status is read by any thread, and writen by only owner thread (rwlock);
+	//		load status array is in several load level(time percentage), where to put a thread is only
+	//		determined by load status value, no sorting, no frequent moving
+	//
+	//		{start_level(int), levels[MAX_LEVEL]}
+	//			new tasks dispatched to the 1st of start_level, making the others idle, and been moved
+	//			to lower level
 
 	return EXIT_SUCCESS;
 }

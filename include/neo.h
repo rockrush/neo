@@ -21,7 +21,8 @@ void NEO_INIT __init_##neoron_name(void) {_register(&_config);}
 #define ARCH_MAXLEN	16
 
 struct host {
-	int kern_ver;
+	int kern_version;
+	char kern_ver[12];
 	char arch[ARCH_MAXLEN];
 	int plugins;
 };
