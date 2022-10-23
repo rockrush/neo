@@ -8,21 +8,36 @@
 #include <getopt.h>
 #include <string.h>
 #include <config.h>
-#include <json-c/json.h>
+#include <libconfig.h>
 
 #include "include/neo.h"
 #include "include/linux.h"
 
 struct host sys_info;
 struct neuron *plugins_head = NULL;
-const char *neuron_dir = NULL;
+config_setting_t *neo_cfg;
 
-struct neo_cfg_s neo_cfg = {
-	.neuron_dir = "neurons",
-	.db_type = "mysql"
-};
+static int load_config(const char *cfg_file) {
+	config_t libcfg;
 
-//供动态库使用的注册函数
+	if (!cfg_file) {
+		printf("[%s] Config file not specified.\n", __func__);
+		return EXIT_FAILURE;
+	}
+
+	config_init(&libcfg);
+	if (!config_read_file(&libcfg, cfg_file)) {
+		fprintf(stderr, "[%s] %s:%d - %s\n", __func__, config_error_file(&libcfg),
+			config_error_line(&libcfg), config_error_text(&libcfg));
+		config_destroy(&libcfg);
+		return EXIT_FAILURE;
+	}
+
+	neo_cfg = config_root_setting(&libcfg);
+	return EXIT_SUCCESS;
+}
+
+// 供动态库使用的注册函数
 void _register(struct neuron *p) {
 	int supported = 0;
 	if (p->support)
@@ -37,73 +52,27 @@ void _register(struct neuron *p) {
 	}
 }
 
-void _on_exit(void) {
-	printf(HDR_NOTE "Cleaning up\n");
-}
-
-static int load_config(const char *cfg_file) {
-	json_object *neo_cfg_json = NULL;
-	struct json_object *cur = NULL, *db_cfg = NULL;
-	const char *cfg_path = cfg_file;
-	if (!cfg_path)
-		cfg_path = NEO_CFG_FILE;
-	if (!cfg_path) {
-		printf(HDR_ERR "Config file path not specified.\n");
-		return EXIT_FAILURE;
-	}
-
-	neo_cfg_json = json_object_from_file(cfg_path);
-	if (!neo_cfg_json) {
-		printf(HDR_ERR "Unkown error reading config: %s.\n", cfg_path);
-		return EXIT_FAILURE;
-	}
-
-	json_object_object_get_ex(neo_cfg_json, "neuron_dir", &cur);
-	if (json_object_get_string(cur))
-		neo_cfg.neuron_dir = realpath(json_object_get_string(cur), NULL);
-	printf(HDR_NOTE "Neuron dir: %s\n", neo_cfg.neuron_dir);
-
-	json_object_object_get_ex(neo_cfg_json, "db_type", &cur);
-	if (json_object_get_string(cur))
-		neo_cfg.db_type = json_object_get_string(cur);
-
-	json_object_object_get_ex(neo_cfg_json, neo_cfg.db_type, &db_cfg);
-	if (!db_cfg) {
-		printf(HDR_ERR "Database config not found\n");
-		json_object_put(neo_cfg_json);
-		return EXIT_FAILURE;
-	}
-
-	for (int i = 0; i < 4; i++)
-		neo_cfg.db_opts[i] = NULL;
-	if (strncmp(neo_cfg.db_type, "mysql", 6) == 0) {
-		json_object_object_get_ex(db_cfg, "host", &cur);
-		if (cur)
-			neo_cfg.db_opts[0] = json_object_get_string(cur);
-		json_object_object_get_ex(db_cfg, "user", &cur);
-		if (cur)
-			neo_cfg.db_opts[1] = json_object_get_string(cur);
-		json_object_object_get_ex(db_cfg, "passwd", &cur);
-		if (cur)
-			neo_cfg.db_opts[2] = json_object_get_string(cur);
-	}
-
-	json_object_put(neo_cfg_json);
-	return EXIT_SUCCESS;
-}
-
 static int load_neurons(void)
 {
 	void *handler = NULL;
 	struct dirent *file = NULL;
 	char plugin_file[PATH_MAX];
+	const char *neuron_dir = NULL;
 	char *file_ext = NULL;
-	DIR *dir_s = opendir(neo_cfg.neuron_dir);
+	DIR *dir_s = NULL;
+
+	config_setting_lookup_string(neo_cfg, "neuron_dir", &neuron_dir);
+	if (!neuron_dir) {
+		printf(HDR_ERR "Failed reading neuron_dir setting\n");
+		return EXIT_FAILURE;
+	}
+
+	dir_s = opendir(neuron_dir);
 	if (dir_s == NULL)
 		return EXIT_FAILURE;
 
 	while ((file = readdir(dir_s)) != NULL) {
-		sprintf(plugin_file, "%s/%s", neo_cfg.neuron_dir, file->d_name);
+		sprintf(plugin_file, "%s/%s", neuron_dir, file->d_name);
 		file_ext = strrchr(plugin_file, '.');
 		if (file_ext == NULL)
 			continue;
@@ -118,32 +87,74 @@ static int load_neurons(void)
 	return EXIT_SUCCESS;
 }
 
+void _on_exit(void) {
+	printf(HDR_NOTE "Cleaning up\n");
+}
+
+void neo_version(void) {
+	printf("%s: %d.%d\n", PROJECT_NAME, NEO_VERSION_MAJOR, NEO_VERSION_MINOR);
+}
+
+void neo_help(void) {
+	neo_version();
+	printf(
+"	-c, --config <PATH>		path of config file\n"
+"	-n, --neurons <PATH>		path of neuron type files\n"
+"	-h, --help			this help info\n"
+"	-v, --version			program version\n");
+}
+
 int main(int argc, char *argv[]) {
 	int retval, opt;
-	char *plugins_dir, *optarg = NULL;
-	const char *short_options = "p:";
+	char *neuron_dir = NULL, *optarg = NULL;
+	const char *short_options = "c:hn:v";
+	const char *cfg_file = NEO_CFG_FILE;
 	struct option long_options[] = {
-		{"plugin", required_argument, NULL, 'p'},
+		{"config", required_argument, NULL, 'c'},
+		{"help", no_argument, NULL, 'h'},
+		{"neurons", required_argument, NULL, 'n'},
+		{"version", no_argument, NULL, 'v'},
 		{ NULL, 0, NULL, 0 }
 	};
-
-	/* initialization */
-	get_sysinfo(&sys_info);
-	printf(HDR_NOTE "System info: Linux %s, CPU arch: %s\n", sys_info.kern_ver, sys_info.arch);
+	config_setting_t *cfg_temp = NULL;
 
 	atexit(&_on_exit);
+
+	// 1. Parse commandline
 	while ((opt = getopt_long(argc, argv, short_options, long_options, NULL)) != -1) {
 		switch(opt) {
-		case 'p':	plugins_dir = optarg; break;
+		case 'c':	cfg_file = optarg; break;
+		case 'h':	neo_help(); exit(EXIT_SUCCESS);
+		case 'n':	neuron_dir = optarg; break;
+		case 'v':	neo_version(); exit(EXIT_SUCCESS);
 		default:	continue;
 		}
 	}
 
-	retval = load_config(NULL);
+	// 2. Reads config file
+	retval = load_config(cfg_file);
 	if (retval)
 		return EXIT_FAILURE;
 
-	retval = load_neurons();
+	// 3. Push commandline
+	if (neuron_dir) {
+		cfg_temp = config_setting_get_member(neo_cfg, "neuron_dir");
+		if (!cfg_temp) {
+			printf(HDR_NOTE "neuron_dir setting not found\n");
+			cfg_temp = config_setting_add(neo_cfg, "neuron_dir", CONFIG_TYPE_STRING);
+		}
+		config_setting_set_string(cfg_temp, neuron_dir);
+	}
+
+
+	/* initialization */
+	// neo_init();		// Init environment, includes modifying pid_max
+	get_sysinfo(&sys_info);
+	printf(HDR_NOTE "System info: Linux %s, CPU arch: %s\n", sys_info.kern_ver, sys_info.arch);
+
+	// load_net();		// load staged network
+
+	retval = load_neurons();	// load neuron type automatically
 	if (retval) {
 		perror(HDR_ERR "loading of plugins failed");
 		return EXIT_FAILURE;

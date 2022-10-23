@@ -2,7 +2,7 @@ cmake_minimum_required (VERSION 3.18)
 project (neo)
 
 set (NEO_VERSION_MAJOR 0)
-set (NEO_VERSION_MINOR 2)
+set (NEO_VERSION_MINOR 3)
 
 set(NEO_CFG_FILE "etc/neo.json" CACHE FILEPATH "Config file path of Neo")
 
@@ -25,7 +25,7 @@ include_directories("${PROJECT_SOURCE_DIR}/include" "${PROJECT_BINARY_DIR}/inclu
 
 add_executable(${PROJECT_NAME} neo.c utils/linux.c)
 target_link_libraries(${PROJECT_NAME} dl)
-target_link_libraries(${PROJECT_NAME} json-c)
+target_link_libraries(${PROJECT_NAME} config)
 set_target_properties(${PROJECT_NAME} PROPERTIES LINK_FLAGS "-rdynamic")
 
 add_subdirectory(neurons neurons)

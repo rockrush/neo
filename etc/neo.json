@@ -1,9 +1,0 @@
-{
-	"neuron_dir": "neurons",	// Where neurons be placed
-	"db_type": "mysql",
-	"mysql": {
-		"host": "localhost",
-		"user": "root",
-		"passwd": "MobilisCan"
-	}
-}

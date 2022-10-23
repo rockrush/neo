@@ -6,7 +6,7 @@
 
 #cmakedefine PROJECT_NAME	"@PROJECT_NAME@"
 
-#define NEO_CFG_FILE		"etc/neo.json"
+#define NEO_CFG_FILE		"etc/neo.cfg"
 #define NEO_DEBUG			@NEO_DEBUG@
 
 #define SPARE_RATIO			2

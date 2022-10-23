@@ -60,11 +60,11 @@ struct neuron {
 	void *out_bp_addr;		/* out_bp_addr = out->data + out->data_size * out->len */
 };
 
-struct neo_cfg_s {
-	const char *neuron_dir;
-	const char *db_type;
-	const char *db_opts[4];	/* TODO: hope 4 is enough */
+enum db_types {
+	DB_MYSQL = 1,
+	DB_UNKNOWN
 };
 
 void _register(struct neuron *);
-#endif	/* _HAS_PLUGINS_H */
+
+#endif	/* _HAS_NEO_H */

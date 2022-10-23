@@ -1,9 +1,0 @@
-[submodule "samples/QuickQanava"]
-	path = samples/QuickQanava
-	url = https://github.com/cneben/QuickQanava
-[submodule "samples/QuickQanavaExample"]
-	path = samples/QuickQanavaExample
-	url = https://github.com/kwallner/QuickQanavaExample
-[submodule "samples/xxhash"]
-	path = samples/xxhash
-	url = https://github.com/Cyan4973/xxHash
