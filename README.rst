@@ -4,36 +4,62 @@ Neo, named after *The Secret of Bluewater*
 
 Self-growing neural network, for possibly real AI applications
 
+Connects any sensors and motors in a cluster, and generates a neuron network, to convert sensor inputs into motor actions.
+
+Balance computing pressure among cluster, and deal with node drop & join.
+
 -------
 Packet:
 -------
-+-----+-------+-------+-------+-------------+
-|Flag | Type  | len   | dst   | payload     |
-+=====+=======+=======+=======+=============+
-| 2B  | 2B    | 4B    | 8B    |             |
-+-----+-------+-------+-------+-------------+
+The API of communicate with an existing neuron network, not necessarily be API between neurons.
+
++-----+------+------+------+----------+
+| dst | len  | type | flag | payload  |
++=====+======+======+======+==========+
+| 8B  |  4B  |  1B  |  1B  |          |
++-----+------+------+------+----------+
 
 
 ------
-Flag
+flag
 ------
-#. (1b)调试标记：操作仅限当前神经元，不论结果如何，不向后传递
-#. (1b)传播标记：要不要向其他神经元传递数据，暂用于控制命令
-#. (2b)工作模式：暂支持中继模式
-#. (4b)命令集合：暂时只有一个组(控制命令)，包括查询神经元状态、关闭神经元、启动神经元、保存网络快照等
+#. (1b)flow: packet to be passed to any neurons connected to the receiving one
+#. (1b)propagate：activate data storage, and effects connected neurons
+#. (1b)ensure: whether to retry if failed
+#. (5b)reserved
+
+
+----
+type
+----
+Packet type, including neuron management, data flow, etc.
+Neuron management includes query for neuron status, stop neuron, start neuron, delete neuron, create neuron, snapshot, etc.
+
+
+---
+len
+---
+Length of payload.
+
+
+---
+dst
+---
+Address of target neuron, uuid seems to be overlong, we need an effective addressing scheme, that supports neuron drifting, and various underlying connection type.
+
+
+-------
+payload
+-------
+Custom format according to `type`.
 
 
 -----
-Type
+TODO
 -----
-#. 最多支持 65535 个命令种类
-#. 可以通过 Flag 中的命令集合扩展，
-
-
------
-TODO:
------
-#. 单目运算器
-#. 双目运算器（四则运算）
-#. 矩阵运算器
-#. 拟阵运算器
+#. Unary operator: process data from one neuron, and pass on
+#. Binary operator: add, subtract, mutiply, divide, ...
+#. GUI app: client app to control neuron network, and for network monitoring
+#. verification & encryption: stop hijacking in an open connecting environment
+#. Matrix operator: even with deep learning nowadays
+#. Matroid operator: final state, process on multi-modal input/output
