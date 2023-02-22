@@ -1358,67 +1358,51 @@ gtk_nodes_node_view_connection_mapper (GtkBuilder	*builder,
  *
  * Returns: 0 on error
  */
-
-gboolean
-gtk_nodes_node_view_save (GtkNodesNodeView *node_view,
-						  const gchar	  *filename)
+gboolean gtk_nodes_node_view_save(GtkNodesNodeView *node_view, const gchar *filename)
 {
-  GtkNodesNodeViewPrivate *priv;
-  GList *l;
-  GList *s;
-  GList *sockets;
-
-  priv = gtk_nodes_node_view_get_instance_private (node_view);
-
 	FILE *f;
+	GList *l;
+	GList *s;
+	GList *sockets;
+	GtkNodesNodeViewPrivate *priv = gtk_nodes_node_view_get_instance_private (node_view);
 
+	g_return_val_if_fail (GTKNODES_IS_NODE_VIEW (node_view), FALSE);
 
-  g_return_val_if_fail (GTKNODES_IS_NODE_VIEW (node_view), FALSE);
-
-  if (filename == NULL)
-	{
-	  g_warning ("No filename specified");
-	  return FALSE;
+	if (filename == NULL) {
+		g_warning ("No filename specified");
+		return FALSE;
 	}
 
 	f = g_fopen(filename, "w+");
 
-  if (f == NULL)
-	{
-	  g_warning ("Error opening file %s for writing", filename);
-	  return FALSE;
+	if (f == NULL) {
+		g_warning ("Error opening file %s for writing", filename);
+		return FALSE;
+	}
+
+	/* lead in */
+	g_fprintf (f, "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
+	g_fprintf (f, "<interface>\n");
+
+	/* fixup the IDs so we can properly load, add and save again
+	 * XXX I really need to think of a better method for unique IDs
+	 */
+	priv->node_id = 0;
+	l = priv->children;
+	while (l) {
+		GtkNodesNodeViewChild *child = l->data;
+		l = l->next;
+
+		if (!GTKNODES_IS_NODE (child->widget))
+			continue;
+
+		g_object_set(child->widget, "id", priv->node_id, NULL);
+		priv->node_id++;
 	}
 
 
-  /* lead in */
-  g_fprintf (f, "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
-  g_fprintf (f, "<interface>\n");
-
-
-
-  /* fixup the IDs so we can properly load, add and save again
-   * XXX I really need to think of a better method for unique IDs
-   */
-  priv->node_id = 0;
-  l = priv->children;
-  while (l)
-	{
-	  GtkNodesNodeViewChild *child = l->data;
-
-	  l = l->next;
-
-	  if (!GTKNODES_IS_NODE (child->widget))
-		continue;
-
-	  g_object_set(child->widget, "id", priv->node_id, NULL);
-	  priv->node_id++;
-	}
-
-
-  l = priv->children;
-
-  while (l)
-	{
+	l = priv->children;
+	while (l) {
 	  gchar *internal_cfg;
 	  GtkNodesNodeSocket *input;
 	  guint x, y, width, height, id;
@@ -1444,8 +1428,7 @@ gtk_nodes_node_view_save (GtkNodesNodeView *node_view,
 
 	  sockets = gtk_nodes_node_get_sinks (GTKNODES_NODE (child->widget));
 
-	  if (sockets == NULL)
-		{
+	  if (sockets == NULL) {
 		  /* meh...*/
 		  internal_cfg = gtk_nodes_node_export_properties(GTKNODES_NODE (child->widget));
 
@@ -1469,8 +1452,7 @@ gtk_nodes_node_view_save (GtkNodesNodeView *node_view,
 
 		  input = gtk_nodes_node_socket_get_input (GTKNODES_NODE_SOCKET (s->data));
 
-		  if (input == NULL)
-			{
+		  if (input == NULL) {
 			  s = s->next;
 			  continue;
 			}
@@ -1490,26 +1472,23 @@ gtk_nodes_node_view_save (GtkNodesNodeView *node_view,
 		  s = s->next;
 		}
 
-		  /* meh...*/
-	  internal_cfg = gtk_nodes_node_export_properties(GTKNODES_NODE (child->widget));
+		/* meh...*/
+		internal_cfg = gtk_nodes_node_export_properties(GTKNODES_NODE (child->widget));
 
-	  if (internal_cfg != NULL)
-		{
-		 g_fprintf (f, "%s", internal_cfg);
-		 g_free (internal_cfg);
+		if (internal_cfg != NULL) {
+			g_fprintf(f, "%s", internal_cfg);
+			g_free(internal_cfg);
 		}
 
-	  g_fprintf (f, "</object>\n");
-
-	  g_list_free (sockets);
+		g_fprintf(f, "</object>\n");
+		g_list_free(sockets);
 	}
 
+	/*lead out */
+	g_fprintf(f, "</interface>\n");
 
-  /*lead out */
-  g_fprintf (f, "</interface>\n");
-
-  fclose(f);
-  return TRUE;
+	fclose(f);
+	return TRUE;
 }
 
 /**

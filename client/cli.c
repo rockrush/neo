@@ -249,11 +249,12 @@ static void activate(GtkApplication *app, gpointer user_data)
 	/* create our application window */
 	GtkWidget *window = gtk_application_window_new(app);
 	gtk_window_set_title(GTK_WINDOW(window), "Neo Monitor");
+	gtk_window_maximize(GTK_WINDOW(window));
 
 	/* create a frame for decoration and add it to the window */
 	frame = gtk_frame_new(NULL);
 	gtk_frame_set_shadow_type(GTK_FRAME(frame), GTK_SHADOW_IN);
-	gtk_container_set_border_width(GTK_CONTAINER(frame), 10);
+	gtk_container_set_border_width(GTK_CONTAINER(frame), 0);
 	gtk_container_add(GTK_CONTAINER(window), frame);
 
 	sw = gtk_scrolled_window_new(NULL, NULL);
@@ -269,14 +270,16 @@ static void activate(GtkApplication *app, gpointer user_data)
 			  G_CALLBACK(node_view_button_press_cb), NULL);
 
 	/* show everything */
-	gtk_widget_set_size_request(window, 400, 400);
+	//gtk_widget_set_size_request(window, 400, 400);
+	//gtk_container_add(GTK_CONTAINER(node_view), node_binary_encode_new());
+	//gtk_container_add(GTK_CONTAINER(node_view), node_convert_number_new());
 	gtk_widget_show_all(window);
 }
 
 int main(int argc, char **argv)
 {
 	int status;
-	GtkApplication *app = gtk_application_new("org.uvie.nodes", G_APPLICATION_DEFAULT_FLAGS);
+	GtkApplication *app = gtk_application_new("org.rockwork.neo", G_APPLICATION_DEFAULT_FLAGS);
 	g_signal_connect(app, "activate", G_CALLBACK(activate), NULL);
 	status = g_application_run(G_APPLICATION(app), argc, argv);
 	g_object_unref(app);
