@@ -25,11 +25,34 @@ inotify
 epoll
 
 +----------------------------------------------------------------------------------+
-|
-|
 |  In[] --> -- Neuron --> Out[]
 |         ^
 |  In[] --|
 |
 |  data array: item_size, len, data[];
 +----------------------------------------------------------------------------------+
+
+1. management of pool
+   create
+   init/reinit
+   destroy
+   pause
+   resume
+2. management of thread
+   create
+   destroy
+   pause
+   resume
+3. management of work
+   create
+   destroy
+   pause
+   resume
+   attach
+   detach
+4. memory management
+   alloc
+   free
+   init
+   resize
+   destroy

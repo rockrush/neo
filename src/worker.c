@@ -1,4 +1,5 @@
 #include	<stdlib.h>
+#include	<unistd.h>
 #include	<stdint.h>
 #include	<stdio.h>
 #include	<errno.h>
@@ -7,51 +8,183 @@
 #include	<pthread.h>
 #include	<sys/prctl.h>
 #include	<sys/sysinfo.h>
+#include	<libconfig.h>
 
-enum neo_state_cmd {
-	NEO_NORMAL,
-	NEO_PAUSE,
-	NEO_CONST,
-	NEO_FADE,
-	NEO_IDLE,
-	NEO_UNKNOWN
-};
+#include	<neo.h>
 
-// func should be general, in/out should be designed for least memcopy
-struct neo_tasklet_s {
-	// TODO: tasklet description
-	uint64_t (*func)(void *in, void *out, void *args);
-	struct neo_tasklet_s *prev, *next;
-};
+void *neo_worker(void *arg);
 
-struct neo_worker_s {
-	pthread_t thread;
-	pthread_attr_t attr;
-	uint16_t weight;		// for tasklet scheduling
-	uint8_t ctrl;			// do not change inside worker
-	uint8_t status;			// do not change outside worker
+/* The last work to run, counts and fades current worker */
+int neo_idle_work(void)
+{
+	sleep(5);
+	return 0;
+}
 
-	// Take an "idle" tasklet, when no more tasklet left in queue.
-	// Added to tail, and executed from head,
-	struct neo_tasklet_s *tasks;	// ring of tasklets
+/* Management of worker pool */
+void *neo_wpool_mgr(void *args)
+{
+	struct neo_cfg_s *cfg = (struct neo_cfg_s *)args;
+	int worker_max = cfg->wpool.max;
 
-	// worker and net_pulse() may modify *tasks
-	// Could this lock be eliminated ?
-	pthread_mutex_t lock;
-};
+	printf(HDR_NOTE "wpool_mgr: %d\n", cfg->env.lcores);
+	//prctl(PR_SET_NAME, "neo-manager");
 
-struct neo_worker_pool_s {
-	struct {
-		volatile uint32_t limit;
-		volatile uint32_t working;
-	} count;
+	while (cfg->wpool.migrate != NEO_FADE) {
+		worker_max = (cfg->wpool.max) ? cfg->wpool.max : get_nprocs();
+		if (worker_max > cfg->wpool.cur)
+			neo_worker_new(&cfg->wpool);	// Grow gradually
+		else if (worker_max < cfg->wpool.cur)
+			neo_worker_fade(&cfg->wpool, NULL);	// CPU hot unplugged?
 
-	uint8_t status;			// normal, constant, pause
+		usleep(2000);
+		printf(HDR_NOTE "wpool manager: %d -> %d\n", cfg->wpool.cur, get_nprocs());
+	}
 
-	// preallocate memory
-	struct neo_worker_s workers[0];
-};
+	// DEBUG
+	struct neo_worker_s *iter = cfg->wpool.workers;
+	while (iter) {
+		printf("Worker %d\n", iter->weight);
+		if (iter == cfg->wpool.workers->prev)
+			break;
+		iter = iter->next;
+	}
 
+	// Exits the whole process
+	while (cfg->wpool.workers)	// Fade out
+		neo_worker_fade(&cfg->wpool, NULL);
+	return NULL;
+}
+
+int neo_wpool_init(struct neo_cfg_s *cfg)
+{
+	int retval = EXIT_SUCCESS;
+	pthread_attr_t mgr_attr;
+
+	retval = pthread_attr_init(&mgr_attr);
+	if (retval) {
+		fprintf(stderr, HDR_ERR "Failed initializing pthread attribute: %s\n", strerror(errno));
+		return EXIT_FAILURE;
+	}
+
+	retval = pthread_attr_setdetachstate(&mgr_attr, PTHREAD_CREATE_JOINABLE);
+	if (retval) {
+		fprintf(stderr, HDR_ERR "Failed putting wpool manager into detached mode: %s\n", strerror(errno));
+		return EXIT_FAILURE;
+	}
+
+	retval = pthread_create(&cfg->wpool.mgr, &mgr_attr, neo_wpool_mgr, (void *)cfg);
+	if (retval) {
+		fprintf(stderr, HDR_ERR "Failed creating wpool manager: %s\n", strerror(errno));
+		return EXIT_FAILURE;
+	}
+	pthread_setname_np(cfg->wpool.mgr, "neo-manager");
+
+	return EXIT_SUCCESS;
+}
+
+int neo_wpool_fini(struct neo_cfg_s *cfg)
+{
+	cfg->wpool.migrate = NEO_FADE;
+	return pthread_join(cfg->wpool.mgr, NULL);
+}
+
+enum neo_state_cmd neo_wpool_migrate(struct neo_cfg_s *cfg, enum neo_state_cmd cmd)
+{
+	enum neo_state_cmd old_cmd = cfg->wpool.migrate;
+	cfg->wpool.migrate = cmd;
+	return old_cmd;
+}
+
+/* Management of worker */
+struct neo_worker_s *neo_worker_new(struct neo_wpool_s *pool)
+{
+	int retval = EXIT_SUCCESS;
+	pthread_attr_t mgr_attr;
+	struct neo_worker_s *current = NULL;
+
+	if (!pool)
+		return NULL;
+
+	current = (struct neo_worker_s *)malloc(sizeof(struct neo_worker_s));
+	if (!current)
+		return NULL;
+	memset(current, 0, sizeof(struct neo_worker_s));
+	current->weight = pool->cur;
+
+	retval = pthread_create(&current->thread, NULL, neo_worker, (void *)current);
+	pthread_setname_np(current->thread, "neo-worker");
+	//pthread_detach(worker->thread);
+	if (retval)
+		return NULL;
+	else if (!pool->workers)
+		pool->workers = current->next = current->prev = current;
+	else {
+		current->next = pool->workers;
+		current->prev = pool->workers->prev;
+		pool->workers->prev->next = current;
+		pool->workers->prev = current;
+	}
+
+	pool->cur = pool->cur + 1;
+	printf(HDR_NOTE "Increase worker %d\n", current->weight);
+	return current;
+}
+
+/* TODO: Pick a least recently used worker */
+struct neo_worker_s *neo_worker_lru(struct neo_wpool_s *pool)
+{
+	if (!pool)
+		return NULL;
+	return pool->workers;
+}
+
+/* TODO: Stop a worker, also update relavent pointers */
+/* worker: optional */
+int neo_worker_fade(struct neo_wpool_s *pool, struct neo_worker_s *worker)
+{
+	int retval;
+	struct neo_worker_s *current = NULL;
+	if (!pool)
+		return EXIT_FAILURE;
+
+	/* If not specified, pick a LRU one */
+	current = (worker) ? worker : neo_worker_lru(pool);
+	if (!current)	/* Not specified, and founds no one */
+		return EXIT_FAILURE;
+
+	printf(HDR_NOTE "Decrease worker %d\n", current->weight);
+	current->status = NEO_FADE;
+	retval = pthread_join(current->thread, NULL);
+	if (retval) {
+		fprintf(stderr, HDR_ERR "Failed decrease worker\n");
+		return retval;
+	} else if (current->next == current)	// Decreasing the only worker
+		pool->workers = NULL;
+	else {
+		if (current == pool->workers)
+			pool->workers = current->next;
+		current->next->prev = current->prev;
+		current->prev->next = current->next;
+	}
+
+	pool->cur = (pool->cur > 0) ? (pool->cur - 1) : 0;
+	free(current);
+	return EXIT_SUCCESS;
+}
+
+/* Management of workload */
+int neo_add_work(void)
+{
+	return 0;
+}
+
+int neo_cancel_work(void)
+{
+	return 0;
+}
+
+/* Management of thread, only for internal usage */
 void *neo_worker(void *arg)
 {
 	struct neo_worker_s *worker = (struct neo_worker_s *)arg;
@@ -59,75 +192,18 @@ void *neo_worker(void *arg)
 
 	while (worker->status != NEO_FADE) {
 		;	// iterate on worker->tasks
-		;	//		process worker->ctrl, don't interrupt tasklet processing
+		;	//	process worker->ctrl, don't interrupt tasklet processing
 	}
 
 	return NULL;
 }
 
-struct neo_worker_pool_s * neo_worker_pool_init(int32_t limit)
-{
-	int pool_mem_size = 0;
-	int max_workers = get_nprocs_conf();
-	struct neo_worker_pool_s *pool = NULL;
-
-	if (!limit || (limit > max_workers))
-		limit = get_nprocs_conf();
-	else
-		limit = max_workers;
-	pool_mem_size = sizeof(struct neo_worker_pool_s)
-		+ limit * sizeof(struct neo_worker_s);
-
-	pool = (struct neo_worker_pool_s *)malloc(pool_mem_size);
-
-	if (!pool) {
-		perror("neo_worker_init");
-		return NULL;
-	}
-
-	memset(pool, 0, pool_mem_size);
-	pool->count.limit = limit;
-	pool->count.working = 0;
-	return pool;
-}
-
-int neo_worker_pool_fini(struct neo_worker_pool_s *pool)
-{
-	// for worker in pool:
-	//		neo_worker_fade(worker)
-	// free(pool)
-}
-
-int neo_worker_pool_migrate(struct neo_worker_pool_s *pool, enum neo_state_cmd cmd)
-{
-	for (int n = 0; n < pool->count.working; n++)
-		if (pool->workers[n].status != cmd)
-			pool->workers[n].ctrl = cmd;
-
-	// TODO: wait workers to respond
-	return 0;
-}
-
-pthread_t *neo_worker_grow(struct neo_worker_pool_s *pool)
-{
-	struct neo_worker_s *worker = &pool->workers[pool->count.working];
-
-	pool->count.working += 1;
-	pthread_attr_init(&worker->attr);
-	//pthread_attr_setstacksize(&worker->attr, stack_size);
-	worker->status = NEO_UNKNOWN;	// accept tasklet only after self check
-	worker->tasks = NULL;
-
-	pthread_create(&worker->thread, &worker->attr, neo_worker, (void *)worker);
-	pthread_detach(worker->thread);
-	return NULL;
-}
-
-pthread_t *neo_worker_fade(struct neo_worker_pool_s *pool, struct neo_worker_s *worker)
-{
-	// swap pool->worker array, or bind worker to core(array index tells core id)
-	worker->ctrl = NEO_FADE;
-	// TODO: wait  worker->status to be NEO_FADE
-	pthread_attr_destroy(&worker->attr);
-	pool->count.working -= 1;
-}
+#if 0
+ 46 3. management of work
+ 47    create
+ 48    destroy
+ 49    pause
+ 50    resume
+ 51    attach
+ 52    detach
+#endif
