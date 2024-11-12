@@ -251,7 +251,7 @@ int main(int argc, char *argv[]) {
 		perror(HDR_ERR "loading of plugins failed");
 		return EXIT_FAILURE;
 	}
-	sleep(1);
+	sleep(10);
 
 	// thread poll
 	//	controller thread: processes data IO among nodes, epoll?

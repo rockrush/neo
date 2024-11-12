@@ -29,7 +29,7 @@ configure_file (
 
 include_directories("${PROJECT_SOURCE_DIR}/include" "${PROJECT_BINARY_DIR}/include")
 
-add_executable(${PROJECT_NAME} main.c utils/linux.c utils/thread.c)
+add_executable(${PROJECT_NAME} main.c utils/linux.c)
 target_link_libraries(${PROJECT_NAME} dl)
 target_link_libraries(${PROJECT_NAME} config)
 file(GLOB sources src/*.c)

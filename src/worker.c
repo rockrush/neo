@@ -15,9 +15,10 @@
 void *neo_worker(void *arg);
 
 /* The last work to run, counts and fades current worker */
-int neo_idle_work(void)
+int neo_idle_work(struct neo_worker_s *worker)
 {
 	sleep(5);
+	printf(HDR_NOTE "Worker %d is idle\n", worker->weight);
 	return 0;
 }
 
@@ -37,17 +38,8 @@ void *neo_wpool_mgr(void *args)
 		else if (worker_max < cfg->wpool.cur)
 			neo_worker_fade(&cfg->wpool, NULL);	// CPU hot unplugged?
 
-		usleep(2000);
-		printf(HDR_NOTE "wpool manager: %d -> %d\n", cfg->wpool.cur, get_nprocs());
-	}
-
-	// DEBUG
-	struct neo_worker_s *iter = cfg->wpool.workers;
-	while (iter) {
-		printf("Worker %d\n", iter->weight);
-		if (iter == cfg->wpool.workers->prev)
-			break;
-		iter = iter->next;
+		usleep(200000);
+		//printf(HDR_NOTE "wpool manager: %d -> %d\n", cfg->wpool.cur, worker_max);
 	}
 
 	// Exits the whole process
@@ -173,6 +165,37 @@ int neo_worker_fade(struct neo_wpool_s *pool, struct neo_worker_s *worker)
 	return EXIT_SUCCESS;
 }
 
+/* Management of thread, only for internal usage */
+void *neo_worker(void *arg)
+{
+	struct neo_work_s *work = NULL;
+	struct neo_worker_s *worker = (struct neo_worker_s *)arg;
+	prctl(PR_SET_NAME, "neo-worker");
+
+	while (worker->status != NEO_FADE) {
+		work = worker->works;
+		if (!work) {
+			// TODO: Tag worker as idle
+			neo_idle_work(worker);
+			continue;
+		}
+
+		work->exec(work);
+
+		if (work == work->next)
+			worker->works = NULL;
+		else if (work->regular)
+			worker->works = work->next;
+		else {
+			work->prev->next = work->next;
+			work->next->prev = work->prev;
+			worker->works = work->next;
+		}
+	}
+
+	return NULL;
+}
+
 /* Management of workload */
 int neo_add_work(void)
 {
@@ -182,20 +205,6 @@ int neo_add_work(void)
 int neo_cancel_work(void)
 {
 	return 0;
-}
-
-/* Management of thread, only for internal usage */
-void *neo_worker(void *arg)
-{
-	struct neo_worker_s *worker = (struct neo_worker_s *)arg;
-	prctl(PR_SET_NAME, "neo-worker");
-
-	while (worker->status != NEO_FADE) {
-		;	// iterate on worker->tasks
-		;	//	process worker->ctrl, don't interrupt tasklet processing
-	}
-
-	return NULL;
 }
 
 #if 0

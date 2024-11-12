@@ -1,6 +1,8 @@
 #ifndef _NEO_WORKER_H
 #define _NEO_WORKER_H
 
+#include <stdbool.h>
+
 enum neo_state_cmd {
 	NEO_NORMAL,
 	NEO_PAUSE,
@@ -13,8 +15,13 @@ enum neo_state_cmd {
 // func should be general, in/out should be designed for least memcopy
 struct neo_work_s {
 	// TODO: tasklet description
-	uint64_t (*func)(void *in, void *out, void *args);
-	struct neo_tasklet_s *prev, *next;
+	uint64_t (*exec)(struct neo_work_s *self);
+	struct neo_work_s *prev, *next;
+	bool regular;	// Whether to run again and again
+
+	void *in;
+	void *out;
+	void *args;
 };
 
 struct neo_worker_s {
@@ -27,7 +34,7 @@ struct neo_worker_s {
 
 	// Take an "idle" tasklet, when no more tasklet left in queue.
 	// Added to tail, and executed from head,
-	struct neo_work_s *tasks;	// ring of attached works
+	struct neo_work_s *works;	// ring of attached works
 
 	// worker and net_pulse() may modify *tasks
 	// Could this lock be eliminated ?
@@ -39,7 +46,7 @@ struct neo_wpool_s {
 	int cur;
 	pthread_t mgr;
 	struct neo_worker_s *workers;
-	struct neo_work_s *tasks;
+	struct neo_work_s *works;	// tasks are sent to pool
 	uint8_t status; // normal, pause
 	uint8_t migrate;
 };
