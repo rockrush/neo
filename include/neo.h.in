@@ -5,6 +5,22 @@
 #include <libconfig.h>
 #include <worker.h>
 
+#define NEO_VERSION_MAJOR	@NEO_VERSION_MAJOR@
+#define NEO_VERSION_MINOR	@NEO_VERSION_MINOR@
+
+#cmakedefine PROJECT_NAME		"@PROJECT_NAME@"
+
+#define NEO_CFG_FILE		"@NEO_CFG_FILE@"
+#define NEO_NEURON_DIR		"@NEO_NEURON_DIR@"
+#define NEO_DEBUG		@NEO_DEBUG@
+
+#define SPARE_RATIO		2
+#define DEFAULT_ARRAY_SIZE	16
+#define ARCH_MAXLEN	16
+#define	NEO_PATH_MAX	256
+#define	NEO_VAR_MAX	64
+#define	NEO_MIN_WORKERS	2
+
 #define NEO_INIT	__attribute__((constructor))
 #define NEO_FINI	__attribute__((destructor))
 
@@ -24,11 +40,10 @@ struct neuron _config = {		\
 void NEO_INIT __init_##neoron_name(void) {_register(&_config);} \
 void NEO_FINI __fini_##neoron_name(void) {} \
 
-#define ARCH_MAXLEN	16
 
 enum db_types {
-	DB_MYSQL = 1,
-	DB_UNKNOWN
+	DB_UNKNOWN = 0,
+	DB_MYSQL
 };
 
 struct environ_s {
@@ -41,13 +56,15 @@ struct environ_s {
 
 struct db_s {
 	enum db_types type;
-	const char *host;
-	const char *user;
-	const char *passwd;
+	char host[NEO_VAR_MAX];
+	char user[NEO_VAR_MAX];
+	char passwd[NEO_VAR_MAX];
 };
 
 struct neo_cfg_s {
-	const char *neuron_dir;
+	char neuron_dir[NEO_PATH_MAX];
+	char stage_file[NEO_PATH_MAX];
+	uint64_t workers;
 
 	struct neo_wpool_s wpool;
 	struct db_s db;
@@ -55,7 +72,6 @@ struct neo_cfg_s {
 	struct neuron *plugins;
 	int plugin_cnt;
 	const char *cfg_file;
-	const char *stage_file;
 };
 
 int neo_init(struct neo_cfg_s *cfg);
@@ -69,4 +85,5 @@ struct neo_worker_s *neo_worker_new(struct neo_wpool_s *pool);
 struct neo_worker_s *neo_worker_lru(struct neo_wpool_s *pool);
 int neo_worker_fade(struct neo_wpool_s *pool, struct neo_worker_s *worker);
 
+int get_sysinfo(struct environ_s *env);
 #endif	/* _HAS_NEO_H */

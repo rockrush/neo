@@ -10,12 +10,10 @@
 #include <dirent.h>
 #include <getopt.h>
 #include <string.h>
-#include <config.h>
-#include <libconfig.h>
+#include <libfyaml.h>
 
 #include "neo.h"
 #include "neuron.h"
-#include "environ.h"
 
 struct neo_cfg_s neo_cfg;
 bool _quiet_quit = false;
@@ -38,12 +36,7 @@ valpath_done:
 }
 
 static int neo_load_config(struct neo_cfg_s *cfg) {
-	config_t libcfg;
-	struct stat fst;
-	const char *tmp_str = NULL;
-	int tmp_int = 0;
-	int retval = CONFIG_TRUE;
-	config_setting_t *tmp_cfg = NULL;
+	struct fy_document *fyd = NULL;
 
 	/* Verify existence of config file */
 	if (!cfg)
@@ -54,72 +47,42 @@ static int neo_load_config(struct neo_cfg_s *cfg) {
 		return EXIT_FAILURE;
 
 	/* Load config file into memory */
-	config_init(&libcfg);
-	if (config_read_file(&libcfg, cfg->cfg_file) != CONFIG_TRUE) {
-		fprintf(stderr, "[%s] %s:%d - %s\n", __func__, config_error_file(&libcfg),
-			config_error_line(&libcfg), config_error_text(&libcfg));
-		config_destroy(&libcfg);
+	fyd = fy_document_build_from_file(NULL, cfg->cfg_file);
+	if (!fyd) {
+		fprintf(stderr, "Failed loading %s\n", cfg->cfg_file);
 		return EXIT_FAILURE;
 	}
+	if (fy_document_scanf(fyd, "/neuron_dir %255s", cfg->neuron_dir) != 1)
+		strncpy(cfg->neuron_dir, NEO_NEURON_DIR, NEO_PATH_MAX);
+	else if (!_validate_path(cfg->neuron_dir, S_IFDIR))
+		goto failed_fyd;
 
-	// Fill neo_cfg with config file
-	/* Priority: commandline argument > config file > default value */
-	if (!cfg->neuron_dir) {
-		retval = config_lookup_string(&libcfg, "neuron_dir", &tmp_str);
-		cfg->neuron_dir = (retval == CONFIG_TRUE) ? strdup(tmp_str) : strdup(NEO_NEURON_DIR);
-	}
-	if (!_validate_path(cfg->neuron_dir, S_IFDIR))
-		return EXIT_FAILURE;
-
-	if (!cfg->stage_file) {
-		if (config_lookup_string(&libcfg, "stage_file", &tmp_str) == CONFIG_TRUE)
-			cfg->stage_file = strdup(tmp_str);
-	}
-	if ((cfg->stage_file) && (!_validate_path(cfg->stage_file, S_IFREG)))
-		return EXIT_FAILURE;
-
-	/* Default: one worker for each logical CPU core */
-	config_lookup_int(&libcfg, "workers", &cfg->wpool.max);
-	if (cfg->wpool.max < 0) {
-		fprintf(stderr, HDR_ERR "Invalid workers setting: %d\n", cfg->wpool.max);
-		return EXIT_FAILURE;
+	if (fy_document_scanf(fyd, "/stage_file %255s", cfg->stage_file) != 1)
+		cfg->stage_file[0] = 0;
+	else if (!_validate_path(cfg->stage_file, S_IFREG)) {
+		printf(HDR_ERR "Invalid stage file: %s\n", cfg->stage_file);
+		cfg->stage_file[0] = 0;
 	}
 
-	if (config_lookup_string(&libcfg, "db.type", &tmp_str) == CONFIG_TRUE)
-		cfg->db.type = strncmp(tmp_str, "mysql", 6) ? DB_UNKNOWN : DB_MYSQL;
-	config_lookup_string(&libcfg, "db.host", &tmp_str);
-		cfg->db.host = strdup(tmp_str);
-	config_lookup_string(&libcfg, "db.user", &tmp_str);
-		cfg->db.user = strdup(tmp_str);
-	config_lookup_string(&libcfg, "db.passwd", &tmp_str);
-		cfg->db.passwd = strdup(tmp_str);
-	config_destroy(&libcfg);
+	if (fy_document_scanf(fyd, "/workers %lu", &cfg->workers) != 1)
+		cfg->workers = NEO_MIN_WORKERS;
+
+	printf(HDR_NOTE "Workers: %lu\n", cfg->workers);
+	char db_type[NEO_VAR_MAX] = {0};
+	if (fy_document_scanf(fyd, "/db/type %63s /db/host %63s /db/user %63s /db/passwd %63s",
+			db_type, cfg->db.host, cfg->db.user, cfg->db.passwd) == 4) {
+		if (!strncmp(db_type, "mysql", NEO_VAR_MAX))
+			cfg->db.type = DB_MYSQL;
+	} else {
+		printf(HDR_NOTE "Invalid db settings\n");
+		goto failed_fyd;
+	}
+
+	fy_document_destroy(fyd);
 	return EXIT_SUCCESS;
-}
-
-static void neo_destroy_config(struct neo_cfg_s *cfg) {
-	if (!cfg)
-		return;
-	if (cfg->db.passwd) {
-		free((void *)cfg->db.passwd);
-		cfg->db.passwd = NULL;
-	}
-	if (cfg->db.user) {
-		free((void *)cfg->db.user);
-		cfg->db.user = NULL;
-	}
-	if (cfg->db.host) {
-		free((void *)cfg->db.host);
-		cfg->db.host = NULL;
-	}
-	if (cfg->stage_file) {
-		free((void *)cfg->stage_file);
-		cfg->stage_file = NULL;
-	}
-	if (cfg->neuron_dir) {
-		free((void *)cfg->neuron_dir);
-		cfg->neuron_dir = NULL;
-	}
+failed_fyd:
+	if (fyd) fy_document_destroy(fyd);
+	return EXIT_FAILURE;
 }
 
 // 供动态库使用的注册函数
@@ -192,7 +155,7 @@ void neo_help(void) {
 }
 
 int main(int argc, char *argv[]) {
-	int opt, retval = EXIT_SUCCESS;
+	int opt, retval = EXIT_FAILURE;
 	const char *short_options = "c:hn:sv";
 	struct option long_options[] = {
 		{"config",	required_argument,	NULL,	'c'},
@@ -214,29 +177,30 @@ int main(int argc, char *argv[]) {
 			break;
 		case 'h':
 			neo_help();
+			retval = EXIT_SUCCESS;
 			_quiet_quit = true;
-			goto clear_cfg;
+			goto final_ret;
 		case 'n':
-			neo_cfg.neuron_dir = strdup(optarg);
+			strncpy(neo_cfg.neuron_dir, optarg, NEO_PATH_MAX);
 			break;
 		case 's':
-			neo_cfg.stage_file = strdup(optarg);
+			strncpy(neo_cfg.stage_file, optarg, NEO_PATH_MAX);
 			break;
 		case 'v':
 			neo_version();
+			retval = EXIT_SUCCESS;
 			_quiet_quit = true;
-			goto clear_cfg;
+			goto final_ret;
 		default:
 			continue;
 		}
 	}
 
 	if (get_sysinfo(&neo_cfg.env) != EXIT_SUCCESS)
-		goto clear_cfg;	// TODO: free allocs
+		goto final_ret;	// TODO: free allocs
 	if (neo_load_config(&neo_cfg))
-		goto clear_cfg;
+		goto final_ret;
 	printf(HDR_NOTE "Loaded configuration: %s\n", neo_cfg.cfg_file);
-
 
 	// TODO: Devel
 	/* initialization */
@@ -253,21 +217,8 @@ int main(int argc, char *argv[]) {
 	}
 	sleep(10);
 
-	// thread poll
-	//	controller thread: processes data IO among nodes, epoll?
-	//	and worker threads: process data IO in node
-	//		each thread maintains load status 2-D array, and pick the most idle one for next hop;
-	//		load status is read by any thread, and writen by only owner thread (rwlock);
-	//		load status array is in several load level(time percentage), where to put a thread is only
-	//		determined by load status value, no sorting, no frequent moving
-	//
-	//		{start_level(int), levels[MAX_LEVEL]}
-	//			new tasks dispatched to the 1st of start_level, making the others idle, and been moved
-	//			to lower level
-
 	neo_fini(&neo_cfg);
-clear_cfg:
-	neo_destroy_config(&neo_cfg);
+	retval = EXIT_SUCCESS;
 final_ret:
 	return retval;
 }

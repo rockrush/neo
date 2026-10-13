@@ -1,16 +1,15 @@
 # Where neuron types be placed
 #neuron_dir: "/usr/libexec/neurons"
 neuron_dir: "neurons"
-#stage_file: "~/neo.stage1"
+stage_file: "~/neo.stage1"
 
 # How many workers can be created at most
 # zero means no limit, is up to cpu cores
 workers: 0
 
-db: {
-	type: "mysql"
-	host: "localhost"
-	user: "rockrush"
-	passwd: "CHANGEME"
-}
+db:
+  type: "mysql"
+  host: "localhost"
+  user: "rockrush"
+  passwd: "CHANGEME"
 

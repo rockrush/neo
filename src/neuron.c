@@ -3,7 +3,7 @@
 #include <stdbool.h>
 #include <string.h>
 
-#include <config.h>
+#include <neo.h>
 #include <neuron.h>
 #include <pulse.h>
 #include <utils.h>
