@@ -50,7 +50,6 @@ void neuron_print(struct neuron *cur, bool recursive)
 		neuron_print(cur->out[i], recursive);
 }
 
-
 /* We define a neuron, and create a thread on it.
  * The thread accepts input, and transfers to output, it may have side effects like driving servo, toggle LED, etc.
  */

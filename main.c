@@ -1,15 +1,6 @@
-#include <stdlib.h>
-#include <stdbool.h>
 #include <errno.h>
-#include <limits.h>
-#include <dlfcn.h>
-#include <stdio.h>
-#include <unistd.h>
-#include <sys/types.h>
 #include <sys/stat.h>
-#include <dirent.h>
 #include <getopt.h>
-#include <string.h>
 #include <libfyaml.h>
 
 #include "neo.h"
@@ -59,15 +50,15 @@ static int neo_load_config(struct neo_cfg_s *cfg) {
 
 	if (fy_document_scanf(fyd, "/stage_file %255s", cfg->stage_file) != 1)
 		cfg->stage_file[0] = 0;
-	else if (!_validate_path(cfg->stage_file, S_IFREG)) {
-		pr_warn("Invalid stage file: %s", cfg->stage_file);
+	else if (!_validate_path(cfg->stage_file, S_IFREG))
 		cfg->stage_file[0] = 0;
-	}
 
-	if (fy_document_scanf(fyd, "/workers %lu", &cfg->workers) != 1)
-		cfg->workers = NEO_MIN_WORKERS;
+	if (fy_document_scanf(fyd, "/workers %hu", &cfg->runner.startup) != 1)
+		cfg->runner.startup = NEO_WORKERS_MIN;
+	if (fy_document_scanf(fyd, "/queue %u", &cfg->runner.queue_size) != 1)
+		cfg->runner.queue_size = NEO_WORKQUEUE_SIZE;
 
-	pr_info("Workers: %lu", cfg->workers);
+	pr_info("Workers: %u", cfg->runner.startup);
 	char db_type[NEO_VAR_MAX] = {0};
 	if (fy_document_scanf(fyd, "/db/type %63s /db/host %63s /db/user %63s /db/passwd %63s",
 			db_type, cfg->db.host, cfg->db.user, cfg->db.passwd) == 4) {
@@ -95,43 +86,8 @@ void _register(struct neuron *p) {
 		neo_cfg.plugin_cnt += 1;
 		p->prev = neo_cfg.plugins;
 		neo_cfg.plugins = p;
-		pr_neuron("New %s", p->name);
+		pr_neo("New %s", p->name);
 	}
-}
-
-static int neo_load_neurons(void)
-{
-	void *handler = NULL;
-	struct dirent *file = NULL;
-	char plugin_file[PATH_MAX];
-	char *file_ext = NULL;
-	DIR *dir_s = NULL;
-
-	if (!neo_cfg.neuron_dir) {
-		pr_err("Failed reading neuron_dir setting");
-		return EXIT_FAILURE;
-	}
-
-	dir_s = opendir(neo_cfg.neuron_dir);
-	if (dir_s == NULL)
-		return EXIT_FAILURE;
-
-	while ((file = readdir(dir_s)) != NULL) {
-		sprintf(plugin_file, "%s/%s", neo_cfg.neuron_dir, file->d_name);
-		file_ext = strrchr(plugin_file, '.');
-		if (file_ext == NULL)
-			continue;
-		else if (strcmp(file_ext, ".neo"))
-			continue;
-		handler = dlopen(plugin_file, RTLD_LAZY);
-		if (handler == NULL) {
-			pr_warn("loading of plugin %s failed.", file->d_name);
-			continue;
-		} else
-			dlclose(handler);	// TODO: need means of free a plugin
-	}
-	closedir(dir_s);
-	return EXIT_SUCCESS;
 }
 
 void _on_exit(void) {
@@ -151,6 +107,30 @@ void neo_help(void) {
 "	-n, --neurons <PATH>		path to neuron type files\n"
 "	-s, --stage <PATH>		path to saved network stage file\n"
 "	-v, --version			program version\n");
+}
+
+// 一些测试任务
+static _Atomic(int) g_done = 0;
+
+static void busy_task(void *arg) {
+	(void)arg;
+	struct timespec ts = { .tv_sec = 0, .tv_nsec = 200 * 1000000L }; /* 3ms */
+	nanosleep(&ts, NULL);
+	atomic_fetch_add(&g_done, 1);
+}
+
+/* 故意让工作线程异常退出，用于演示自动拉起 */
+static void suicidal_task(void *arg) {
+	(void)arg;
+	fprintf(stderr, "[task] 触发 pthread_exit(), 模拟线程异常\n");
+	pthread_exit(NULL);
+}
+
+static void test_task(void *arg) {
+	int id = (int)(intptr_t)arg;
+	printf("[task %d] test on %zu\n", id, pthread_self());
+	struct timespec ts = { .tv_sec = 0, .tv_nsec = 50 * 1000000L }; /* 3ms */
+	nanosleep(&ts, NULL);
 }
 
 int main(int argc, char *argv[]) {
@@ -196,25 +176,78 @@ int main(int argc, char *argv[]) {
 	}
 
 	if (get_sysinfo(&neo_cfg.env) != EXIT_SUCCESS)
-		goto final_ret;	// TODO: free allocs
+		goto final_ret;
 	if (neo_load_config(&neo_cfg))
 		goto final_ret;
 	pr_info("Loaded configuration: %s", neo_cfg.cfg_file);
 
-	// TODO: Devel
-	/* initialization */
 	neo_init(&neo_cfg);	// Init environment, includes modifying pid_max
 
-	pr_info("Develop breakpoint");
+	pr_neo("Develop breakpoint");
 	// load_net();		// load staged network
 
 	// load local neuron type automatically
 	// TODO: fanotify on neuron_dir for update/add/del
-	if (neo_load_neurons()) {
-		pr_err("loading of plugins failed");
+	if (neo_load_neurons(&neo_cfg))
 		return EXIT_FAILURE;
-	}
-	sleep(1);
+
+//====== worker pool testing ===================================================
+	struct timespec s = { .tv_sec = 1, .tv_nsec = 0 };
+	/* --- 1) 基础提交 --- */
+	pr_info(">>> 提交 1000 个任务");
+	for (int i = 0; i < 1000; ++i)
+		runner_submit(&neo_cfg.runner, busy_task, (void *)(intptr_t)i);
+	nanosleep(&s, NULL);
+	runner_stats(&neo_cfg.runner);
+
+	/* --- 2) 暂停 --- */
+	pr_info(">>> 暂停线程池，尝试提交任务应失败");
+	runner_pause(&neo_cfg.runner);
+	nanosleep(&s, NULL);
+	bool ok = runner_submit(&neo_cfg.runner, busy_task, NULL);
+	pr_warn("暂停中提交结果: %s", ok ? "成功" : "被拒绝");
+
+	/* --- 3) 恢复 --- */
+	pr_info(">>> 恢复线程池");
+	runner_resume(&neo_cfg.runner);
+	for (int i = 0; i < 200; ++i)
+		runner_submit(&neo_cfg.runner, busy_task, (void *)(intptr_t)i);
+
+	/* --- 4) 异常线程自动拉起 --- */
+	pr_info(">>> 触发异常线程, 观察自动拉起");
+	runner_submit(&neo_cfg.runner, suicidal_task, NULL);
+	nanosleep(&s, NULL);
+	runner_submit(&neo_cfg.runner, busy_task, NULL);
+	nanosleep(&s, NULL);
+	runner_stats(&neo_cfg.runner);
+
+	/* --- 5) 动态扩容 --- */
+	const uint16_t busy_cnt = 4000;
+	pr_info(">>> 提交 %u 个耗时任务, 触发扩容", busy_cnt);
+	atomic_store(&g_done, 0);
+	for (int i = 0; i < busy_cnt; ++i)
+		runner_submit(&neo_cfg.runner, busy_task, (void *)(intptr_t)i);
+
+	struct timespec ms = { .tv_sec = 0, .tv_nsec = 50 * 1000000L };
+	nanosleep(&ms, NULL);
+	runner_stats(&neo_cfg.runner);
+	pr_info("扩容后线程数: %u", atomic_load(&neo_cfg.runner.w_cnt));
+
+	while (atomic_load(&g_done) < busy_cnt) nanosleep(&ms, NULL);
+	pr_info("全部任务完成");
+
+	/* --- 6) 缩容 --- */
+	pr_info(">>> 等待缩容");
+	nanosleep(&s, NULL);
+	runner_stats(&neo_cfg.runner);
+
+	/* --- 7) 重置 --- */
+	pr_info(">>> 清空队列");
+	runner_reset(&neo_cfg.runner);
+	struct timespec s8 = { .tv_sec = 8, .tv_nsec = 0 };
+	nanosleep(&s8, NULL);
+	runner_stats(&neo_cfg.runner);
+//====== worker pool testing ===================================================
 
 	neo_fini(&neo_cfg);
 	retval = EXIT_SUCCESS;

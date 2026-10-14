@@ -3,9 +3,8 @@
 neuron_dir: "neurons"
 stage_file: "~/neo.stage1"
 
-# How many workers can be created at most
-# zero means no limit, is up to cpu cores
-workers: 0
+workers: 0	# workers be created on startup
+queue: 4096	# queued works amount at most
 
 db:
   type: "mysql"

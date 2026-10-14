@@ -2,12 +2,11 @@
 #define NEO_NEURON_H
 
 #include <stdbool.h>
+#include <stdint.h>
 
-#include <neo.h>
-#include <utils.h>
+#include "utils.h"
 
-#define SPARE_RATIO			2
-#define DEFAULT_ARRAY_SIZE	16
+struct environ_s;
 
 struct neuron_life {
 	int age;

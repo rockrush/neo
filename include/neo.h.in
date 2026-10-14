@@ -1,8 +1,10 @@
 #ifndef _HAS_NEO_H
 #define _HAS_NEO_H
 
+#include <stdio.h>
 #include <stdint.h>
-#include <worker.h>
+
+#include "worker.h"
 
 #define NEO_VERSION_MAJOR	@NEO_VERSION_MAJOR@
 #define NEO_VERSION_MINOR	@NEO_VERSION_MINOR@
@@ -13,12 +15,12 @@
 #define NEO_NEURON_DIR		"@NEO_NEURON_DIR@"
 #define NEO_DEBUG		@NEO_DEBUG@
 
-#define SPARE_RATIO		2
 #define DEFAULT_ARRAY_SIZE	16
-#define ARCH_MAXLEN	16
-#define	NEO_PATH_MAX	256
-#define	NEO_VAR_MAX	64
-#define	NEO_MIN_WORKERS	2
+#define ARCH_MAXLEN		16
+#define NEO_PATH_MAX		256
+#define NEO_VAR_MAX		64
+#define NEO_WORKERS_MIN		2
+#define NEO_WORKQUEUE_SIZE	8192
 
 #define NEO_INIT	__attribute__((constructor))
 #define NEO_FINI	__attribute__((destructor))
@@ -27,7 +29,7 @@
 #define pr_warn(fmt, ...)	fprintf(stderr, "\033[1;33m[ WARN ]\033[0m " fmt "\n", ##__VA_ARGS__)
 #define pr_err(fmt, ...)	fprintf(stderr, "\033[1;31m[  ERR ]\033[0m " fmt "\n", ##__VA_ARGS__)
 #define pr_trace(fmt, ...)	fprintf(stdout, "\033[1;32m[ TRACE]\033[0m " fmt "\n", ##__VA_ARGS__)
-#define pr_neuron(fmt, ...)	fprintf(stdout, "\t\033[1;42m[NEURON]\033[0m " fmt "\n", ##__VA_ARGS__)
+#define pr_neo(fmt, ...)	fprintf(stdout, "\t\033[1;42m[NEO]\033[0m " fmt "\n", ##__VA_ARGS__)
 
 #define NEW_NEURON(neuron_name, thread, check_support)	\
 struct neuron _config = {		\
@@ -38,7 +40,7 @@ struct neuron _config = {		\
 	.next = NULL,			\
 };	\
 void NEO_INIT __init_##neoron_name(void) {_register(&_config);} \
-void NEO_FINI __fini_##neoron_name(void) {} \
+void NEO_FINI __fini_##neoron_name(void) {}
 
 enum db_types {
 	DB_UNKNOWN = 0,
@@ -63,9 +65,8 @@ struct db_s {
 struct neo_cfg_s {
 	char neuron_dir[NEO_PATH_MAX];
 	char stage_file[NEO_PATH_MAX];
-	uint64_t workers;
+	struct runner runner;
 
-	struct neo_wpool_s wpool;
 	struct db_s db;
 	struct environ_s env;
 	struct neuron *plugins;
@@ -75,14 +76,6 @@ struct neo_cfg_s {
 
 int neo_init(struct neo_cfg_s *cfg);
 int neo_fini(struct neo_cfg_s *cfg);
-
-int neo_wpool_init(struct neo_cfg_s *cfg);
-int neo_wpool_fini(struct neo_cfg_s *cfg);
-enum neo_state_cmd neo_wpool_migrate(struct neo_cfg_s *cfg, enum neo_state_cmd cmd);
-
-struct neo_worker_s *neo_worker_new(struct neo_wpool_s *pool);
-struct neo_worker_s *neo_worker_lru(struct neo_wpool_s *pool);
-int neo_worker_fade(struct neo_wpool_s *pool, struct neo_worker_s *worker);
-
+int neo_load_neurons(struct neo_cfg_s *cfg);
 int get_sysinfo(struct environ_s *env);
 #endif	/* _HAS_NEO_H */
