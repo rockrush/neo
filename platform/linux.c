@@ -6,7 +6,7 @@
 #include <linux/version.h>
 #include <libconfig.h>
 
-#include "../include/neo.h"
+#include "neo.h"
 
 int get_sysinfo(struct environ_s *env)
 {
@@ -24,7 +24,7 @@ int get_sysinfo(struct environ_s *env)
 	env->lcores = get_nprocs();	// May change at runtime
 	if (env->lcores < 1)	// How can it be possible ?
 		return EXIT_FAILURE;
-	printf(HDR_NOTE "System info: Linux %s, CPU arch: %s, threads: %d\n",
+	pr_info("System info: Linux %s, CPU arch: %s, threads: %d",
 		env->kern_ver, env->arch, env->lcores);
 	return EXIT_SUCCESS;
 }

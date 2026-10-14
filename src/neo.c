@@ -32,16 +32,16 @@ int _demo_main(void)
 
 int neo_init(struct neo_cfg_s *cfg)
 {
-	int retval = neo_wpool_init(cfg);
-	if (retval)
-		return retval;
+	//int retval = neo_wpool_init(cfg);
+	//if (retval)
+	//	return retval;
 	return EXIT_SUCCESS;
 }
 
 int neo_fini(struct neo_cfg_s *cfg)
 {
-	int retval = neo_wpool_fini(cfg);
-	if (retval)
-		return retval;
+	//int retval = neo_wpool_fini(cfg);
+	//if (retval)
+	//	return retval;
 	return EXIT_SUCCESS;
 }

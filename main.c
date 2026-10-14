@@ -23,11 +23,11 @@ static bool _validate_path(const char *path, mode_t type) {
 	bool retval = false;
 	char *tmp_str = realpath(path, NULL);
 	if (!tmp_str)
-		fprintf(stderr, "[%s] Failed resolving %s: %s.]\n", __func__, path, strerror(errno));
+		pr_warn("Failed resolving %s: %s", path, strerror(errno));
 	else if (stat(tmp_str, &fst))
-		printf("[%s] Failed reading %s: %s.\n", __func__, path, strerror(errno));
+		pr_err("Failed reading %s: %s", path, strerror(errno));
 	else if (!(fst.st_mode & type))
-		printf("[%s] %s is not a %s.\n", __func__, path, (type == S_IFREG) ? "file" : "directory");
+		pr_err("%s is not a %s", path, (type == S_IFREG) ? "file" : "directory");
 	else
 		retval = true;
 valpath_done:
@@ -49,7 +49,7 @@ static int neo_load_config(struct neo_cfg_s *cfg) {
 	/* Load config file into memory */
 	fyd = fy_document_build_from_file(NULL, cfg->cfg_file);
 	if (!fyd) {
-		fprintf(stderr, "Failed loading %s\n", cfg->cfg_file);
+		pr_err("Failed loading %s", cfg->cfg_file);
 		return EXIT_FAILURE;
 	}
 	if (fy_document_scanf(fyd, "/neuron_dir %255s", cfg->neuron_dir) != 1)
@@ -60,21 +60,21 @@ static int neo_load_config(struct neo_cfg_s *cfg) {
 	if (fy_document_scanf(fyd, "/stage_file %255s", cfg->stage_file) != 1)
 		cfg->stage_file[0] = 0;
 	else if (!_validate_path(cfg->stage_file, S_IFREG)) {
-		printf(HDR_ERR "Invalid stage file: %s\n", cfg->stage_file);
+		pr_warn("Invalid stage file: %s", cfg->stage_file);
 		cfg->stage_file[0] = 0;
 	}
 
 	if (fy_document_scanf(fyd, "/workers %lu", &cfg->workers) != 1)
 		cfg->workers = NEO_MIN_WORKERS;
 
-	printf(HDR_NOTE "Workers: %lu\n", cfg->workers);
+	pr_info("Workers: %lu", cfg->workers);
 	char db_type[NEO_VAR_MAX] = {0};
 	if (fy_document_scanf(fyd, "/db/type %63s /db/host %63s /db/user %63s /db/passwd %63s",
 			db_type, cfg->db.host, cfg->db.user, cfg->db.passwd) == 4) {
 		if (!strncmp(db_type, "mysql", NEO_VAR_MAX))
 			cfg->db.type = DB_MYSQL;
 	} else {
-		printf(HDR_NOTE "Invalid db settings\n");
+		pr_warn("Invalid db settings");
 		goto failed_fyd;
 	}
 
@@ -95,8 +95,7 @@ void _register(struct neuron *p) {
 		neo_cfg.plugin_cnt += 1;
 		p->prev = neo_cfg.plugins;
 		neo_cfg.plugins = p;
-
-		printf(HDR_NEURON "New %s\n", p->name);
+		pr_neuron("New %s", p->name);
 	}
 }
 
@@ -109,7 +108,7 @@ static int neo_load_neurons(void)
 	DIR *dir_s = NULL;
 
 	if (!neo_cfg.neuron_dir) {
-		printf(HDR_ERR "Failed reading neuron_dir setting\n");
+		pr_err("Failed reading neuron_dir setting");
 		return EXIT_FAILURE;
 	}
 
@@ -126,7 +125,7 @@ static int neo_load_neurons(void)
 			continue;
 		handler = dlopen(plugin_file, RTLD_LAZY);
 		if (handler == NULL) {
-			printf(HDR_ERR "loading of plugin %s failed.\n", file->d_name);
+			pr_warn("loading of plugin %s failed.", file->d_name);
 			continue;
 		} else
 			dlclose(handler);	// TODO: need means of free a plugin
@@ -137,11 +136,11 @@ static int neo_load_neurons(void)
 
 void _on_exit(void) {
 	if (!_quiet_quit)
-		printf(HDR_NOTE "Cleaning up\n");
+		pr_info("Cleaning up");
 }
 
 void neo_version(void) {
-	printf("%s: %d.%d\n", PROJECT_NAME, NEO_VERSION_MAJOR, NEO_VERSION_MINOR);
+	pr_info("%s: %d.%d", PROJECT_NAME, NEO_VERSION_MAJOR, NEO_VERSION_MINOR);
 }
 
 void neo_help(void) {
@@ -200,22 +199,22 @@ int main(int argc, char *argv[]) {
 		goto final_ret;	// TODO: free allocs
 	if (neo_load_config(&neo_cfg))
 		goto final_ret;
-	printf(HDR_NOTE "Loaded configuration: %s\n", neo_cfg.cfg_file);
+	pr_info("Loaded configuration: %s", neo_cfg.cfg_file);
 
 	// TODO: Devel
 	/* initialization */
 	neo_init(&neo_cfg);	// Init environment, includes modifying pid_max
 
-	printf(HDR_NOTE "Develop breakpoint\n");
+	pr_info("Develop breakpoint");
 	// load_net();		// load staged network
 
 	// load local neuron type automatically
 	// TODO: fanotify on neuron_dir for update/add/del
 	if (neo_load_neurons()) {
-		perror(HDR_ERR "loading of plugins failed");
+		pr_err("loading of plugins failed");
 		return EXIT_FAILURE;
 	}
-	sleep(10);
+	sleep(1);
 
 	neo_fini(&neo_cfg);
 	retval = EXIT_SUCCESS;

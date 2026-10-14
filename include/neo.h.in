@@ -2,7 +2,6 @@
 #define _HAS_NEO_H
 
 #include <stdint.h>
-#include <libconfig.h>
 #include <worker.h>
 
 #define NEO_VERSION_MAJOR	@NEO_VERSION_MAJOR@
@@ -24,10 +23,11 @@
 #define NEO_INIT	__attribute__((constructor))
 #define NEO_FINI	__attribute__((destructor))
 
-#define HDR_ERR		"\033[1;31m[ ERROR]\033[0m "
-#define HDR_NOTE	"\033[1;32m[  NOTE]\033[0m "
-#define HDR_TRACE	"\033[1;32m[ TRACE]\033[0m "
-#define HDR_NEURON	"\t\033[1;42mNEURON\033[0m "
+#define pr_info(fmt, ...)	fprintf(stdout, "\033[1;32m[ INFO ]\033[0m " fmt "\n", ##__VA_ARGS__)
+#define pr_warn(fmt, ...)	fprintf(stderr, "\033[1;33m[ WARN ]\033[0m " fmt "\n", ##__VA_ARGS__)
+#define pr_err(fmt, ...)	fprintf(stderr, "\033[1;31m[  ERR ]\033[0m " fmt "\n", ##__VA_ARGS__)
+#define pr_trace(fmt, ...)	fprintf(stdout, "\033[1;32m[ TRACE]\033[0m " fmt "\n", ##__VA_ARGS__)
+#define pr_neuron(fmt, ...)	fprintf(stdout, "\t\033[1;42m[NEURON]\033[0m " fmt "\n", ##__VA_ARGS__)
 
 #define NEW_NEURON(neuron_name, thread, check_support)	\
 struct neuron _config = {		\
@@ -39,7 +39,6 @@ struct neuron _config = {		\
 };	\
 void NEO_INIT __init_##neoron_name(void) {_register(&_config);} \
 void NEO_FINI __fini_##neoron_name(void) {} \
-
 
 enum db_types {
 	DB_UNKNOWN = 0,

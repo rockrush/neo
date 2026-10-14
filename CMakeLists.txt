@@ -24,7 +24,11 @@ configure_file (
 	"${PROJECT_BINARY_DIR}/include/${PROJECT_NAME}.h"
 )
 
-include_directories("${PROJECT_SOURCE_DIR}/include" "${PROJECT_BINARY_DIR}/include")
+include_directories(
+	"${PROJECT_SOURCE_DIR}/include"
+	"${PROJECT_BINARY_DIR}/include"
+	"${PROJECT_SOURCE_DIR}/ext/clog"
+)
 
 file(GLOB sources main.c src/*.c platform/*.c)
 add_executable(${PROJECT_NAME})

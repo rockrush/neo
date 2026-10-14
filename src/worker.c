@@ -10,7 +10,7 @@
 #include	<sys/sysinfo.h>
 #include	<libconfig.h>
 
-#include	<neo.h>
+#include	"neo.h"
 
 void *neo_worker(void *arg);
 
@@ -18,7 +18,7 @@ void *neo_worker(void *arg);
 int neo_idle_work(struct neo_worker_s *worker)
 {
 	sleep(5);
-	printf(HDR_NOTE "Worker %d is idle\n", worker->weight);
+	pr_info("Worker %d is idle", worker->weight);
 	return 0;
 }
 
@@ -28,7 +28,7 @@ void *neo_wpool_mgr(void *args)
 	struct neo_cfg_s *cfg = (struct neo_cfg_s *)args;
 	int worker_max = cfg->wpool.max;
 
-	printf(HDR_NOTE "wpool_mgr: %d\n", cfg->env.lcores);
+	pr_info("wpool_mgr: %d", cfg->env.lcores);
 	//prctl(PR_SET_NAME, "neo-manager");
 
 	while (cfg->wpool.migrate != NEO_FADE) {
@@ -39,7 +39,7 @@ void *neo_wpool_mgr(void *args)
 			neo_worker_fade(&cfg->wpool, NULL);	// CPU hot unplugged?
 
 		usleep(200000);
-		//printf(HDR_NOTE "wpool manager: %d -> %d\n", cfg->wpool.cur, worker_max);
+		//pr_info("wpool manager: %d -> %d", cfg->wpool.cur, worker_max);
 	}
 
 	// Exits the whole process
@@ -55,23 +55,22 @@ int neo_wpool_init(struct neo_cfg_s *cfg)
 
 	retval = pthread_attr_init(&mgr_attr);
 	if (retval) {
-		fprintf(stderr, HDR_ERR "Failed initializing pthread attribute: %s\n", strerror(errno));
+		pr_err("Failed initializing pthread attribute: %s", strerror(errno));
 		return EXIT_FAILURE;
 	}
 
 	retval = pthread_attr_setdetachstate(&mgr_attr, PTHREAD_CREATE_JOINABLE);
 	if (retval) {
-		fprintf(stderr, HDR_ERR "Failed putting wpool manager into detached mode: %s\n", strerror(errno));
+		pr_err("Failed putting wpool manager into detached mode: %s", strerror(errno));
 		return EXIT_FAILURE;
 	}
 
 	retval = pthread_create(&cfg->wpool.mgr, &mgr_attr, neo_wpool_mgr, (void *)cfg);
 	if (retval) {
-		fprintf(stderr, HDR_ERR "Failed creating wpool manager: %s\n", strerror(errno));
+		pr_err("Failed creating wpool manager: %s", strerror(errno));
 		return EXIT_FAILURE;
 	}
 	pthread_setname_np(cfg->wpool.mgr, "neo-manager");
-
 	return EXIT_SUCCESS;
 }
 
@@ -119,7 +118,7 @@ struct neo_worker_s *neo_worker_new(struct neo_wpool_s *pool)
 	}
 
 	pool->cur = pool->cur + 1;
-	printf(HDR_NOTE "Increase worker %d\n", current->weight);
+	pr_info("Increase worker %d", current->weight);
 	return current;
 }
 
@@ -145,11 +144,11 @@ int neo_worker_fade(struct neo_wpool_s *pool, struct neo_worker_s *worker)
 	if (!current)	/* Not specified, and founds no one */
 		return EXIT_FAILURE;
 
-	printf(HDR_NOTE "Decrease worker %d\n", current->weight);
+	pr_info("Decrease worker %d", current->weight);
 	current->status = NEO_FADE;
 	retval = pthread_join(current->thread, NULL);
 	if (retval) {
-		fprintf(stderr, HDR_ERR "Failed decrease worker\n");
+		pr_err("Failed decrease worker");
 		return retval;
 	} else if (current->next == current)	// Decreasing the only worker
 		pool->workers = NULL;
